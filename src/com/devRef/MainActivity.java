@@ -16,47 +16,49 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.util.EntityUtils;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class MainActivity extends Activity
-{
+public class MainActivity extends Activity {
     public static final String INSTANCE_STATE_API_ARRAY_LIST_NAME = "API_ARRAY_LIST";
     private ArrayList<APIMenuItem> APIs;
 
     @Override
-    public void onCreate(Bundle savedInstanceState)
-    {
+    public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
 
-        if(savedInstanceState != null){
+        if (savedInstanceState != null) {
             APIs = savedInstanceState.getParcelableArrayList(INSTANCE_STATE_API_ARRAY_LIST_NAME);
         }
 
-        if(APIs == null){
+        if (APIs == null) {
             new APIReferenceAsyncTask().execute(Config.DEV_URL + Config.MAIN_LINK);
         } else {
-            if(!APIs.isEmpty()){
+            if (!APIs.isEmpty()) {
                 setAPIListView();
             }
         }
     }
 
-    private void setAPIListView(){
-        if(!APIs.isEmpty()){
+    private void setAPIListView() {
+        if (!APIs.isEmpty()) {
             ListView lv = (ListView) findViewById(R.id.listViewAPI);
-            APIArrayAdapter adapter = new APIArrayAdapter(getApplicationContext(),android.R.layout.simple_list_item_1, APIs);
+            APIArrayAdapter adapter = new APIArrayAdapter(getApplicationContext(), android.R.layout.simple_list_item_1, APIs);
 
             lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
                 @Override
                 public void onItemClick(AdapterView<?> adapterView, View view, int position, long l) {
                     APIMenuItem item = (APIMenuItem) adapterView.getAdapter().getItem(position);
                     new APIReferenceAsyncTask().execute(Config.DEV_URL + item.getLink());
-                    Log.d("New link",Config.DEV_URL + item.getLink());
+                    Log.d("New link", Config.DEV_URL + item.getLink());
                 }
             });
 
@@ -65,9 +67,9 @@ public class MainActivity extends Activity
     }
 
     @Override
-    protected void onSaveInstanceState(Bundle outState){
+    protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        outState.putParcelableArrayList(INSTANCE_STATE_API_ARRAY_LIST_NAME,APIs);
+        outState.putParcelableArrayList(INSTANCE_STATE_API_ARRAY_LIST_NAME, APIs);
     }
 
     @Override
@@ -77,42 +79,18 @@ public class MainActivity extends Activity
 //        APIs = savedInstanceState.getParcelableArrayList(INSTANCE_STATE_API_ARRAY_LIST_NAME);
     }
 
-    public class APIReferenceAsyncTask extends AsyncTask<String,Void,Void>{
-        String leftMenu;
-        String header;
+    public class APIReferenceAsyncTask extends AsyncTask<String, Void, Void> {
+        Elements packagesLinks;
 
         @Override
         protected Void doInBackground(String... strings) {
             try {
-                Log.d("Parse","Start");
-                DefaultHttpClient client = new DefaultHttpClient();
-                HttpGet uri = new HttpGet(strings[0]);
-                HttpResponse response = client.execute(uri);
+                Log.d("Parse" + Config.DEBUG_NAME, "Start");
 
-                HttpEntity entity = response.getEntity();
-                if (entity != null) {
-                    String content = EntityUtils.toString(entity);
+                Document doc = Jsoup.connect(strings[0]).get();
+                packagesLinks = doc.select("#packages-nav ul > li > a");
 
-                    // Find headers
-                    header = content.split("<div id=\"doc-api-level\" class=\"1\" style=\"display:none\"></div>")[0];
-                    header = header.replace("\n\n","");
-
-                    // Find left menu
-                    Pattern pattern = Pattern.compile("<div class=\"col-4\" id=\"side-nav\".*>.*</div>",Pattern.MULTILINE | Pattern.DOTALL);
-                    Matcher matcher = pattern.matcher(content);
-                    while (matcher.find()){
-                        leftMenu = matcher.group();
-                    }
-                    leftMenu = leftMenu.split("<!-- end side-nav -->")[0];
-                    pattern = Pattern.compile("<ul>.*</div> <!-- end packages-nav -->",Pattern.MULTILINE | Pattern.DOTALL);
-                    matcher = pattern.matcher(leftMenu);
-                    while(matcher.find()){
-                        leftMenu = matcher.group();
-//                        We need this if we want to send data in HTML format in WebView
-//                        leftMenu = leftMenu.replace("</div> <!-- end packages-nav -->","");
-                    }
-                }
-                Log.d("Parse", "Done");
+                Log.d("Parse" + Config.DEBUG_NAME, "Done");
                 return null;
             } catch (IOException e) {
                 e.printStackTrace();
@@ -124,10 +102,9 @@ public class MainActivity extends Activity
         @Override
         protected void onPostExecute(Void result) {
             APIs = new ArrayList<APIMenuItem>();
-            Pattern pattern = Pattern.compile("<a href=\"(.*html)\">(.*)</a></li>");
-            Matcher matcher = pattern.matcher(leftMenu);
-            while(matcher.find()){
-                APIs.add(new APIMenuItem(matcher.group(1), matcher.group(2)));
+
+            for( Element packageItem : packagesLinks ){
+                APIs.add(new APIMenuItem(packageItem.attr("href"), packageItem.text()));
             }
             setAPIListView();
         }
